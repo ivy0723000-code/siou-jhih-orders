@@ -77,7 +77,8 @@ function newForm(date){
   return{id:"",customerName:"",phone:"",posNo:"",cart:emptyCart(),
     deliveryDate:date||today(1),deliveryTime:"12:00",
     type:"delivery",address:"",taxId:"",note:"",
-    status:"confirmed",payMethod:"cod",payStatus:"unpaid",customItems:[]};
+    status:"confirmed",payMethod:"cod",payStatus:"unpaid",customItems:[],
+    isKeyed:false,isDelivered:false,driverMatched:false};
 }
 function genId(){return"ORD-"+String(Date.now()).slice(-6);}
 
@@ -292,6 +293,18 @@ export default function App() {
     const newOrders = orders.map(o=>o.id===id?{...o,payStatus:o.payStatus==="paid"?"unpaid":"paid"}:o);
     commitOrders(newOrders, history, customers);
   }
+  function toggleKeyed(id){
+    const newOrders = orders.map(o=>o.id===id?{...o,isKeyed:!o.isKeyed}:o);
+    commitOrders(newOrders, history, customers);
+  }
+  function toggleDelivered(id){
+    const newOrders = orders.map(o=>o.id===id?{...o,isDelivered:!o.isDelivered}:o);
+    commitOrders(newOrders, history, customers);
+  }
+  function toggleDriver(id){
+    const newOrders = orders.map(o=>o.id===id?{...o,driverMatched:!o.driverMatched}:o);
+    commitOrders(newOrders, history, customers);
+  }
 
   // ── Form helpers ───────────────────────────────────────────────────────────
   function openNew(){ setForm(newForm(selDate)); setAddrVal(""); setEditId(null); setShowForm(true); }
@@ -338,7 +351,7 @@ export default function App() {
   },[]);
 
   // ── Derived ────────────────────────────────────────────────────────────────
-  const dateTabs = Array.from({length:14},(_,i)=>today(i));
+  const dateTabs = Array.from({length:60},(_,i)=>today(i));
   const countByDate = d=>orders.filter(o=>o.deliveryDate===d).length;
   const pickupCount = d=>orders.filter(o=>o.deliveryDate===d&&o.type==="pickup").length;
   const filtered = orders
@@ -377,9 +390,12 @@ export default function App() {
     const amt=cartAmt(order.cart,order.customItems);
     return(
       <div className="card">
-        <div style={{textAlign:"center",minWidth:52,background:"rgba(0,0,0,0.22)",borderRadius:8,padding:"9px 5px",border:`1px solid rgba(200,169,110,0.13)`,flexShrink:0}}>
-          <div style={{fontSize:9,color:B.muted,letterSpacing:1,marginBottom:3}}>{order.type==="delivery"?"外送":"自取"}</div>
-          <div style={{fontSize:16,fontWeight:700,color:B.gold,fontFamily:"'Noto Serif TC',serif",lineHeight:1.1}}>{order.deliveryTime}</div>
+        <div style={{textAlign:"center",minWidth:60,background:"rgba(0,0,0,0.22)",borderRadius:8,padding:"9px 5px",border:`1px solid rgba(200,169,110,0.13)`,flexShrink:0}}>
+          <div style={{fontSize:9,color:B.muted,letterSpacing:1,marginBottom:2}}>{order.type==="delivery"?"外送":"自取"}</div>
+          <div style={{fontSize:11,color:B.goldL,fontWeight:600,marginBottom:2,letterSpacing:0.5}}>
+            {(()=>{const d=new Date(order.deliveryDate+"T00:00:00");return `${d.getMonth()+1}/${d.getDate()} 週${"日一二三四五六"[d.getDay()]}`;})()}
+          </div>
+          <div style={{fontSize:15,fontWeight:700,color:B.gold,fontFamily:"'Noto Serif TC',serif",lineHeight:1.1}}>{order.deliveryTime}</div>
           {order.type==="pickup"&&order.posNo&&(
             <div style={{marginTop:5,background:"rgba(251,191,36,0.1)",border:"1px solid rgba(251,191,36,0.25)",borderRadius:4,padding:"2px 4px"}}>
               <div style={{fontSize:9,color:"#d97706"}}>POS</div>
@@ -407,11 +423,13 @@ export default function App() {
               </div>
             );})}
             {(order.customItems||[]).filter(c=>c.name||c.price).map((c,i)=>(
-              <div key={"ci"+i} style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-                <span style={{fontSize:12,color:"#fcd34d"}}>✦ {c.name||"客製餐盒"}</span>
-                {Number(c.qty)>1&&<span style={{fontSize:12,color:B.gold,fontWeight:600}}>×{c.qty}</span>}
-                <span style={{fontSize:11,color:B.muted}}>${(Number(c.price||0)*Number(c.qty||1)).toLocaleString()}</span>
-                {c.note&&<span className="bdg" style={{color:"#d4a853",background:"rgba(200,169,110,0.07)",borderColor:"rgba(200,169,110,0.14)"}}>備：{c.note}</span>}
+              <div key={"ci"+i} style={{display:"flex",flexDirection:"column",gap:2,marginBottom:3,background:"rgba(252,211,77,0.05)",border:"1px solid rgba(252,211,77,0.15)",borderRadius:6,padding:"4px 8px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                  <span style={{fontSize:12,color:"#fcd34d",fontWeight:600}}>✦ {c.name||"客製餐盒"}</span>
+                  <span style={{fontSize:11,color:B.gold}}>×{c.qty||1}</span>
+                  <span style={{fontSize:11,color:B.muted}}>${(Number(c.price||0)*Number(c.qty||1)).toLocaleString()}</span>
+                </div>
+                {c.note&&<div style={{fontSize:11,color:"#d4a853",lineHeight:1.5,wordBreak:"break-all"}}>備註：{c.note}</div>}
               </div>
             ))}
           </div>
@@ -423,6 +441,20 @@ export default function App() {
           <button className="pspill" onClick={()=>togglePay(order.id)} style={{color:ps.color,background:ps.bg,borderColor:ps.bd}}>
             {order.payStatus==="paid"?"✓ 已匯款":"✗ 未結帳"}
           </button>
+          <button className="pspill" onClick={()=>toggleKeyed(order.id)}
+            style={{color:order.isKeyed?"#6ee7b7":"#f87171",background:order.isKeyed?"rgba(110,231,183,0.1)":"rgba(248,113,113,0.08)",borderColor:order.isKeyed?"rgba(110,231,183,0.35)":"rgba(248,113,113,0.3)"}}>
+            {order.isKeyed?"✓ 已Key單":"✗ 未Key單"}
+          </button>
+          {order.type==="delivery"&&<>
+            <button className="pspill" onClick={()=>toggleDelivered(order.id)}
+              style={{color:order.isDelivered?"#6ee7b7":"#f87171",background:order.isDelivered?"rgba(110,231,183,0.1)":"rgba(248,113,113,0.08)",borderColor:order.isDelivered?"rgba(110,231,183,0.35)":"rgba(248,113,113,0.3)"}}>
+              {order.isDelivered?"✓ 已送達":"✗ 未送達"}
+            </button>
+            <button className="pspill" onClick={()=>toggleDriver(order.id)}
+              style={{color:order.driverMatched?"#fbbf24":"#9ca3af",background:order.driverMatched?"rgba(251,191,36,0.1)":"rgba(156,163,175,0.08)",borderColor:order.driverMatched?"rgba(251,191,36,0.35)":"rgba(156,163,175,0.3)"}}>
+              {order.driverMatched?"🛵 司機已媒合":"🔍 待媒合司機"}
+            </button>
+          </>}
           <select value={order.status} onChange={e=>setOStatus(order.id,e.target.value)} className="ssel" style={{background:st.bg,color:st.color,borderColor:st.bd}}>
             {Object.entries(ORDER_STATUS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
           </select>
@@ -728,10 +760,14 @@ export default function App() {
 
             {form.type==="pickup"&&(
               <div style={{marginBottom:13}}>
-                <label className="flbl">POS 機單號</label>
-                <input className="inp" value={form.posNo} placeholder="例如：1、2、3…"
-                  onChange={e=>setForm({...form,posNo:e.target.value})}
-                  style={{fontFamily:"'Noto Serif TC',serif",fontWeight:600,fontSize:15,color:"#fbbf24"}}/>
+                <label className="flbl">自取號碼（POS 機對應單號）</label>
+                <select className="inp" value={form.posNo} onChange={e=>setForm({...form,posNo:e.target.value})}
+                  style={{fontFamily:"'Noto Serif TC',serif",fontWeight:700,fontSize:15,color:"#fbbf24",background:"#0d1428"}}>
+                  <option value="">請選擇自取號碼…</option>
+                  {Array.from({length:20},(_,i)=>i+1).map(n=>(
+                    <option key={n} value={String(n)}>自取 #{n}</option>
+                  ))}
+                </select>
               </div>
             )}
 
