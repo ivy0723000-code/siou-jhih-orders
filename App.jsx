@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { db } from "./firebase.js";
+import { ref, onValue, set } from "firebase/database";
 
 const B = {
   navy:"#1a2145", dark:"#111830", deep:"#0d1428", mid:"#1e2a52",
@@ -80,9 +82,9 @@ function newForm(date){
 function genId(){return"ORD-"+String(Date.now()).slice(-6);}
 
 // Storage keys
-const KEY_ORDERS    = "sj-orders-v2";
-const KEY_HISTORY   = "sj-history-v2";
-const KEY_CUSTOMERS = "sj-customers-v2";
+const DB_ORDERS    = "siou-jhih/orders";
+const DB_HISTORY   = "siou-jhih/history";
+const DB_CUSTOMERS = "siou-jhih/customers";
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&family=Noto+Sans+TC:wght@300;400;500&display=swap');
@@ -187,38 +189,27 @@ export default function App() {
 
   const saveTimer = useRef(null);
 
-  // ── Load from shared storage ────────────────────────────────────────────────
+  // ── Load from Firebase (realtime) ───────────────────────────────────────────
   useEffect(() => {
-    async function load() {
-      try {
-        const [r1,r2,r3] = await Promise.all([
-          window.storage.get(KEY_ORDERS,   true).catch(()=>null),
-          window.storage.get(KEY_HISTORY,  true).catch(()=>null),
-          window.storage.get(KEY_CUSTOMERS,true).catch(()=>null),
-        ]);
-        if (r1?.value) setOrders(JSON.parse(r1.value));
-        if (r2?.value) setHistory(JSON.parse(r2.value));
-        if (r3?.value) setCustomers(JSON.parse(r3.value));
-        setLastSync(new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"}));
-        setSyncState("synced");
-        setTimeout(()=>setSyncState("idle"),2000);
-      } catch(e){}
-    }
-    load();
-    const poll = setInterval(load, 15000);
-    return () => clearInterval(poll);
+    const unsub1 = onValue(ref(db, DB_ORDERS),    s => { const d=s.val(); setOrders(d?Object.values(d):[]); });
+    const unsub2 = onValue(ref(db, DB_HISTORY),   s => { const d=s.val(); setHistory(d?Object.values(d):[]); });
+    const unsub3 = onValue(ref(db, DB_CUSTOMERS), s => { const d=s.val(); setCustomers(d||{}); });
+    setSyncState("synced");
+    setLastSync(new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"}));
+    return () => { unsub1(); unsub2(); unsub3(); };
   }, []);
 
-  // ── Save all data ───────────────────────────────────────────────────────────
+  // ── Save all data to Firebase ───────────────────────────────────────────────
   const saveAll = useCallback(async (newOrders, newHistory, newCustomers) => {
     setSyncState("saving");
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       try {
+        const toObj = arr => { const o={}; arr.forEach(i=>{ if(i?.id) o[i.id]=i; }); return o; };
         await Promise.all([
-          window.storage.set(KEY_ORDERS,   JSON.stringify(newOrders),   true),
-          window.storage.set(KEY_HISTORY,  JSON.stringify(newHistory),  true),
-          window.storage.set(KEY_CUSTOMERS,JSON.stringify(newCustomers),true),
+          set(ref(db, DB_ORDERS),    toObj(newOrders)),
+          set(ref(db, DB_HISTORY),   toObj(newHistory)),
+          set(ref(db, DB_CUSTOMERS), newCustomers),
         ]);
         setSyncState("saved");
         setLastSync(new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"}));
